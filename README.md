@@ -15,7 +15,7 @@ Fast and minimal system fetch written in x86_64 assembly. No libc, no bloat, jus
 Requires `nasm`, `make` and `binutils`.
 
 ```bash
-git clone [https://github.com/your-username/assfetch.git](https://github.com/your-username/assfetch.git)
+git clone https://github.com/Minish777/assfetch.git
 cd assfetch
 make
 sudo make install
