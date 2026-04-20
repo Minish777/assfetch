@@ -26,3 +26,7 @@ assfetch
 
 <img width="590" height="304" alt="изображение" src="https://github.com/user-attachments/assets/26827fc7-9454-4ea6-ad05-8f42a7615074" />
 <img width="647" height="260" alt="изображение" src="https://github.com/user-attachments/assets/e1c38bdc-714a-445c-8fae-45e05eb6b31c" />
+<img width="469" height="405" alt="image" src="https://github.com/user-attachments/assets/7eaede92-a81f-4e94-8221-581c0995c906" />
+
+
+
