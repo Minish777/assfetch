@@ -3,7 +3,7 @@ ASFLAGS = -f elf64
 LD = ld
 TARGET = assfetch
 
-all: $(TARGET)
+all: clean $(TARGET)
 
 $(TARGET): fetch.o
 	$(LD) fetch.o -o $(TARGET)
