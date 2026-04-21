@@ -1,21 +1,34 @@
-AS = nasm
+# assfetch build configuration
+# Author: Rootly
+
+AS      = nasm
 ASFLAGS = -f elf64
-LD = ld
-TARGET = assfetch
+LD      = ld
+# Strip all symbols to minimize binary size
+LDFLAGS = -s
+TARGET  = assfetch
+SRC     = fetch.asm
+OBJ     = fetch.o
 
-all: clean $(TARGET)
+.PHONY: all clean install
 
-$(TARGET): fetch.o
-	$(LD) fetch.o -o $(TARGET)
+# Default target
+all: $(TARGET)
 
-fetch.o: fetch.asm
-	$(AS) $(ASFLAGS) fetch.asm -o fetch.o
+# Link object files into executable
+$(TARGET): $(OBJ)
+	$(LD) $(LDFLAGS) $(OBJ) -o $(TARGET)
 
+# Assemble source files
+$(OBJ): $(SRC)
+	$(AS) $(ASFLAGS) $(SRC) -o $(OBJ)
+
+# Remove build artifacts
 clean:
-	rm -f *.o $(TARGET)
+	rm -f $(OBJ) $(TARGET)
 
+# Copy binary to system path
 install: $(TARGET)
-	install -m 755 $(TARGET) /usr/local/bin/$(TARGET)
-
-uninstall:
-	rm -f /usr/local/bin/$(TARGET)
+	@echo "Installing $(TARGET) to /usr/local/bin..."
+	sudo cp $(TARGET) /usr/local/bin/
+	sudo chmod 755 /usr/local/bin/$(TARGET)
