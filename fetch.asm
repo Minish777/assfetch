@@ -1,22 +1,22 @@
-; assfetch v1.5 - fast sys info tool
+; assfetch v1.5.2 - sysinfo utility (dynamic alignment fix)
 ; author: rootly
 default rel
 
 section .data
-    ; gruvbox colors
+    ; colors (gruvbox)
     c_art db 27, '[38;5;208m', 0
     c_lbl db 27, '[38;5;142m', 0
     c_val db 27, '[38;5;223m', 0
     rs    db 27, '[0m', 0
     
-    ; penguin art
-    a1 db "    .--.     ", 0
-    a2 db "   |o_o |    ", 0
-    a3 db "   |:_/ |    ", 0
-    a4 db "  //   \ \   ", 0
-    a5 db " (|     | )  ", 0
-    a6 db "/'\_   _/`\\ ", 0
-    a7 db "\___)=(___/  ", 0
+    ; penguin art (trimmed for alignment logic)
+    a1 db "    .--.", 0
+    a2 db "   |o_o |", 0
+    a3 db "   |:_/ |", 0
+    a4 db "  //   \ \", 0
+    a5 db " (|     | )", 0
+    a6 db "/'\_   _/`\\", 0
+    a7 db "\___)=(___/", 0
     art dq a1, a2, a3, a4, a5, a6, a7
 
     t_os  db "os  : ", 0
@@ -46,13 +46,13 @@ section .bss
     m_used  resb 32
     m_tot   resb 32
     n_buf   resb 32
-    tmp     resb 16384 ; large buffer for cpuinfo
+    tmp     resb 16384 ; parsing buffer
 
 section .text
     global _start
 
 _start:
-    ; fetch env
+    ; get env vars from stack
     mov rbp, [rsp]
     lea rsi, [rsp + 8 + rbp*8 + 8]
     push rsi
@@ -64,11 +64,11 @@ _start:
     lea rdi, [e_sh]
     call get_env
 
-    ; system calls
-    mov rax, 63 ; uname
+    ; uname & sysinfo calls
+    mov rax, 63
     lea rdi, [u_buf]
     syscall
-    mov rax, 99 ; sysinfo
+    mov rax, 99
     lea rdi, [si_buf]
     syscall
 
@@ -76,16 +76,22 @@ _start:
     call parse_cpu
     call calc_mem
 
-    ; main loop
+    ; main output loop
     xor r12, r12
 .loop:
     lea rsi, [c_art]
-    call pr
+    call pr_l    ; print art color (no length calc needed here)
     mov rsi, [art + r12*8]
-    call pr
+    call pr      ; print art line, rax = length
     
-    ; align info
-    mov rcx, 18
+    ; --- DYNAMIC ALIGNMENT FIX ---
+    ; calculate needed padding
+    mov rcx, 16  ; target width for art column
+    sub rcx, rax ; target - actual_length
+    cmp rcx, 1   ; ensure at least 1 space
+    jge .spc_l
+    mov rcx, 1
+.spc_l:
 .spc:
     push rcx
     mov rax, 1
@@ -96,7 +102,7 @@ _start:
     pop rcx
     loop .spc
 
-    ; render info lines
+    ; print labels/vals based on row index
     cmp r12, 0
     je .i_u
     cmp r12, 1
@@ -115,13 +121,13 @@ _start:
 
 .i_u:
     lea rsi, [c_lbl]
-    call pr
+    call pr_l
     lea rsi, [e_usr]
-    call pr 
+    call pr_l 
     mov rsi, .at
-    call pr
+    call pr_l
     lea rsi, [u_buf + 65]
-    call pr
+    call pr_l
     jmp .next
 section .data
     .at db "@", 0
@@ -130,91 +136,91 @@ section .text
 
 .i_o:
     lea rsi, [c_lbl]
-    call pr
+    call pr_l
     lea rsi, [t_os]
-    call pr 
+    call pr_l 
     lea rsi, [rs]
-    call pr
+    call pr_l
     lea rsi, [o_name]
-    call pr
+    call pr_l
     jmp .next
 .i_k:
     lea rsi, [c_val]
-    call pr
+    call pr_l
     lea rsi, [t_ker]
-    call pr 
+    call pr_l 
     lea rsi, [rs]
-    call pr
+    call pr_l
     lea rsi, [u_buf + 130]
-    call pr
+    call pr_l
     jmp .next
 .i_c:
     lea rsi, [c_lbl]
-    call pr
+    call pr_l
     lea rsi, [t_cpu]
-    call pr
+    call pr_l
     lea rsi, [rs]
-    call pr
+    call pr_l
     lea rsi, [c_name]
-    call pr
+    call pr_l
     jmp .next
 .i_p:
     lea rsi, [c_val]
-    call pr
+    call pr_l
     lea rsi, [t_up]
-    call pr 
+    call pr_l 
     lea rsi, [rs]
-    call pr
+    call pr_l
     mov rax, [si_buf]
     xor rdx, rdx
     mov rbx, 60
     div rbx
     call itoa
-    call pr
+    call pr_l
     lea rsi, [unit]
-    call pr
+    call pr_l
     jmp .next
 .i_m:
     lea rsi, [c_lbl]
-    call pr
+    call pr_l
     lea rsi, [t_mem]
-    call pr 
+    call pr_l 
     lea rsi, [rs]
-    call pr
+    call pr_l
     lea rsi, [m_used]
-    call pr
+    call pr_l
     lea rsi, [sep]
-    call pr
+    call pr_l
     lea rsi, [m_tot]
-    call pr
+    call pr_l
     lea rsi, [mib]
-    call pr
+    call pr_l
     jmp .next
 .i_s:
     lea rsi, [c_val]
-    call pr
+    call pr_l
     lea rsi, [t_sh]
-    call pr 
+    call pr_l 
     lea rsi, [rs]
-    call pr
+    call pr_l
     lea rsi, [e_sh]
-    call pr
+    call pr_l
 
 .next:
     lea rsi, [nl]
-    call pr
+    call pr_l
     inc r12
     cmp r12, 7
     jl .loop
 
-.exit:
     mov rax, 60
     xor rdi, rdi
     syscall
 
-; --- logic ---
+; --- system logic ---
 
-pr:
+; pr_l: Print string, do not calculate length (restores rsi/rax/rdi/rdx)
+pr_l:
     push rsi
     push rax
     push rdi
@@ -232,6 +238,29 @@ pr:
     pop rdx
     pop rdi
     pop rax
+    pop rsi
+    ret
+
+; pr: Print string AND return its length in rax (restores rsi/rdi/rdx)
+pr:
+    push rsi
+    push rdi
+    push rdx
+    xor rdx, rdx
+.l:
+    cmp byte [rsi+rdx], 0
+    je .w
+    inc rdx
+    jmp .l
+.w:
+    mov rax, 1 ; save length to rax for alignment logic
+    push rdx
+    mov rdx, rdx ; length is already in rdx for syscall
+    mov rdi, 1
+    syscall
+    pop rax ; get length back to rax
+    pop rdx
+    pop rdi
     pop rsi
     ret
 
@@ -259,8 +288,8 @@ copy_s:
     ret
 
 calc_mem:
-    ; memory math with overflow fix
-    mov r8, [si_buf + 104] ; unit
+    ; use rdx:rax for memory math (prevents 16GB+ overflow)
+    mov r8, [si_buf + 104] ; mem_unit
     mov rax, [si_buf + 32] ; total
     sub rax, [si_buf + 40] ; free
     mul r8
@@ -321,17 +350,22 @@ parse_os:
     lea rdi, [f_os]
     xor rsi, rsi
     syscall
+    test rax, rax
+    js .err
     mov rdi, rax
     xor rax, rax
     lea rsi, [tmp]
-    mov rdx, 2048
+    mov rdx, 4096
     syscall
+    mov r10, rax ; byte count
     mov rax, 3
     syscall
+    
     lea rsi, [tmp]
+    add r10, rsi ; end of buf
 .f_p:
-    cmp byte [rsi], 0
-    je .err
+    cmp rsi, r10
+    jae .err
     cmp dword [rsi], 'PRET'
     je .found
     inc rsi
@@ -370,17 +404,22 @@ parse_cpu:
     lea rdi, [f_cpu]
     xor rsi, rsi
     syscall
+    test rax, rax
+    js .err
     mov rdi, rax
     lea rsi, [tmp]
     mov rdx, 16384
     xor rax, rax
     syscall
+    mov r10, rax
     mov rax, 3
     syscall
+    
     lea rsi, [tmp]
+    add r10, rsi
 .find:
-    cmp byte [rsi], 0
-    je .err
+    cmp rsi, r10
+    jae .err
     cmp dword [rsi], 'mode'
     jne .nxt
     cmp dword [rsi+4], 'l na'
