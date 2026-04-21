@@ -1,19 +1,15 @@
-; assfetch - x86_64 system info
-; build: nasm -f elf64 fetch.asm -o fetch.o && ld fetch.o -o assfetch
-
+; assfetch v1.5 - fast sys info tool
+; author: rootly
 default rel
 
 section .data
-    ; Gruvbox colors
-    c1 db 27, '[38;5;208m', 0
-    c2 db 27, '[38;5;142m', 0
-    c3 db 27, '[38;5;223m', 0
-    rs db 27, '[0m', 0
+    ; gruvbox colors
+    c_art db 27, '[38;5;208m', 0
+    c_lbl db 27, '[38;5;142m', 0
+    c_val db 27, '[38;5;223m', 0
+    rs    db 27, '[0m', 0
     
-    ; Color blocks
-    dots db 27, '[48;5;142m  ', 27, '[48;5;214m  ', 27, '[48;5;208m  ', 27, '[0m', 10, 0
-
-    ; Penguin art
+    ; penguin art
     a1 db "    .--.     ", 0
     a2 db "   |o_o |    ", 0
     a3 db "   |:_/ |    ", 0
@@ -21,26 +17,24 @@ section .data
     a5 db " (|     | )  ", 0
     a6 db "/'\_   _/`\\ ", 0
     a7 db "\___)=(___/  ", 0
-
     art dq a1, a2, a3, a4, a5, a6, a7
 
-    t_at  db "@", 0
     t_os  db "os  : ", 0
     t_ker db "ker : ", 0
     t_cpu db "cpu : ", 0
     t_up  db "up  : ", 0
     t_mem db "mem : ", 0
     t_sh  db "sh  : ", 0
-    u_min db " min", 0
-    u_mib db " MiB", 0
-    u_sep db " / ", 0
-    unk   db "unknown", 0
-
+    
     f_os  db "/etc/os-release", 0
     f_cpu db "/proc/cpuinfo", 0
     v_usr db "USER", 0
     v_sh  db "SHELL", 0
+    unk   db "unknown", 0
     nl    db 10, 0
+    sep   db " / ", 0
+    mib   db " MiB", 0
+    unit  db " min", 0
 
 section .bss
     u_buf   resb 1024
@@ -49,17 +43,16 @@ section .bss
     e_sh    resb 64
     o_name  resb 128
     c_name  resb 128
-    up_str  resb 32
     m_used  resb 32
     m_tot   resb 32
     n_buf   resb 32
-    tmp     resb 4096
+    tmp     resb 16384 ; large buffer for cpuinfo
 
 section .text
     global _start
 
 _start:
-    ; Environment
+    ; fetch env
     mov rbp, [rsp]
     lea rsi, [rsp + 8 + rbp*8 + 8]
     push rsi
@@ -71,58 +64,28 @@ _start:
     lea rdi, [e_sh]
     call get_env
 
-    ; Info gathering
-    mov rax, 63
+    ; system calls
+    mov rax, 63 ; uname
     lea rdi, [u_buf]
     syscall
-
-    mov rax, 99
+    mov rax, 99 ; sysinfo
     lea rdi, [si_buf]
     syscall
 
     call parse_os
     call parse_cpu
-    
-    ; Uptime
-    mov rax, [si_buf]
-    xor rdx, rdx
-    mov rbx, 60
-    div rbx
-    call itoa
-    lea rdi, [up_str]
-    call copy_s
-    lea rsi, [u_min]
-    call copy_s
-    
     call calc_mem
 
-    ; Draw loop
+    ; main loop
     xor r12, r12
 .loop:
-    lea rsi, [c1]
+    lea rsi, [c_art]
+    call pr
+    mov rsi, [art + r12*8]
     call pr
     
-    cmp r12, 7
-    jl .p_art
-    lea rsi, [.blank]
-    call pr
-    jmp .align
-.p_art:
-    mov rbx, [art + r12*8]
-    mov rsi, rbx
-    call pr
-    
-    mov rsi, rbx
-    xor rdx, rdx
-.len:
-    cmp byte [rsi+rdx], 0
-    je .pad
-    inc rdx
-    jmp .len
-.pad:
-    mov rcx, 18 ; Padding width
-    sub rcx, rdx
-    jle .info
+    ; align info
+    mov rcx, 18
 .spc:
     push rcx
     mov rax, 1
@@ -132,15 +95,8 @@ _start:
     syscall
     pop rcx
     loop .spc
-.align:
-    jmp .info
 
-section .data
-    .blank db "             ", 0
-    .s     db " ", 0
-section .text
-
-.info:
+    ; render info lines
     cmp r12, 0
     je .i_u
     cmp r12, 1
@@ -155,22 +111,25 @@ section .text
     je .i_m
     cmp r12, 6
     je .i_s
-    cmp r12, 7
-    je .i_d
     jmp .next
 
 .i_u:
-    lea rsi, [c2]
+    lea rsi, [c_lbl]
     call pr
     lea rsi, [e_usr]
     call pr 
-    lea rsi, [t_at]
+    mov rsi, .at
     call pr
     lea rsi, [u_buf + 65]
     call pr
     jmp .next
+section .data
+    .at db "@", 0
+    .s  db " ", 0
+section .text
+
 .i_o:
-    lea rsi, [c2]
+    lea rsi, [c_lbl]
     call pr
     lea rsi, [t_os]
     call pr 
@@ -180,7 +139,7 @@ section .text
     call pr
     jmp .next
 .i_k:
-    lea rsi, [c3]
+    lea rsi, [c_val]
     call pr
     lea rsi, [t_ker]
     call pr 
@@ -190,7 +149,7 @@ section .text
     call pr
     jmp .next
 .i_c:
-    lea rsi, [c2]
+    lea rsi, [c_lbl]
     call pr
     lea rsi, [t_cpu]
     call pr
@@ -200,17 +159,23 @@ section .text
     call pr
     jmp .next
 .i_p:
-    lea rsi, [c3]
+    lea rsi, [c_val]
     call pr
     lea rsi, [t_up]
     call pr 
     lea rsi, [rs]
     call pr
-    lea rsi, [up_str]
+    mov rax, [si_buf]
+    xor rdx, rdx
+    mov rbx, 60
+    div rbx
+    call itoa
+    call pr
+    lea rsi, [unit]
     call pr
     jmp .next
 .i_m:
-    lea rsi, [c2]
+    lea rsi, [c_lbl]
     call pr
     lea rsi, [t_mem]
     call pr 
@@ -218,15 +183,15 @@ section .text
     call pr
     lea rsi, [m_used]
     call pr
-    lea rsi, [u_sep]
+    lea rsi, [sep]
     call pr
     lea rsi, [m_tot]
     call pr
-    lea rsi, [u_mib]
+    lea rsi, [mib]
     call pr
     jmp .next
 .i_s:
-    lea rsi, [c3]
+    lea rsi, [c_val]
     call pr
     lea rsi, [t_sh]
     call pr 
@@ -234,17 +199,12 @@ section .text
     call pr
     lea rsi, [e_sh]
     call pr
-    jmp .next
-.i_d:
-    lea rsi, [dots]
-    call pr
-    jmp .exit
 
 .next:
     lea rsi, [nl]
     call pr
     inc r12
-    cmp r12, 8
+    cmp r12, 7
     jl .loop
 
 .exit:
@@ -252,7 +212,7 @@ section .text
     xor rdi, rdi
     syscall
 
-; --- Functions ---
+; --- logic ---
 
 pr:
     push rsi
@@ -299,20 +259,19 @@ copy_s:
     ret
 
 calc_mem:
-    mov rax, [si_buf + 32]
-    sub rax, [si_buf + 40]
-    xor rdx, rdx
-    mov ebx, [si_buf + 104]
-    mul rbx
+    ; memory math with overflow fix
+    mov r8, [si_buf + 104] ; unit
+    mov rax, [si_buf + 32] ; total
+    sub rax, [si_buf + 40] ; free
+    mul r8
     mov rbx, 1048576
     div rbx
     call itoa
     lea rdi, [m_used]
     call copy_s
+
     mov rax, [si_buf + 32]
-    xor rdx, rdx
-    mov ebx, [si_buf + 104]
-    mul rbx
+    mul r8
     mov rbx, 1048576
     div rbx
     call itoa
@@ -330,7 +289,7 @@ get_env:
 .m:
     mov al, [r9]
     mov ah, [rbx]
-    cmp ah, 0
+    test ah, ah
     je .e
     cmp al, ah
     jne .n
@@ -362,29 +321,26 @@ parse_os:
     lea rdi, [f_os]
     xor rsi, rsi
     syscall
-    test rax, rax
-    js .err
     mov rdi, rax
     xor rax, rax
     lea rsi, [tmp]
-    mov rdx, 1024
+    mov rdx, 2048
     syscall
     mov rax, 3
     syscall
     lea rsi, [tmp]
-.f_pretty:
+.f_p:
     cmp byte [rsi], 0
     je .err
     cmp dword [rsi], 'PRET'
     je .found
     inc rsi
-    jmp .f_pretty
+    jmp .f_p
 .found:
-.skip:
     cmp byte [rsi], '='
     je .start
     inc rsi
-    jmp .skip
+    jmp .found
 .start:
     inc rsi
     cmp byte [rsi], '"'
@@ -397,8 +353,6 @@ parse_os:
     cmp al, '"'
     je .done
     cmp al, 10
-    je .done
-    cmp al, 0
     je .done
     stosb
     jmp .cl
@@ -416,41 +370,35 @@ parse_cpu:
     lea rdi, [f_cpu]
     xor rsi, rsi
     syscall
-    test rax, rax
-    js .err
     mov rdi, rax
-    xor rax, rax
     lea rsi, [tmp]
-    mov rdx, 4096
+    mov rdx, 16384
+    xor rax, rax
     syscall
     mov rax, 3
     syscall
     lea rsi, [tmp]
-.f_model:
+.find:
     cmp byte [rsi], 0
     je .err
-    ; Ищем "model name"
     cmp dword [rsi], 'mode'
     jne .nxt
     cmp dword [rsi+4], 'l na'
     je .found
 .nxt:
     inc rsi
-    jmp .f_model
+    jmp .find
 .found:
-.skip:
     cmp byte [rsi], ':'
     je .start
     inc rsi
-    jmp .skip
+    jmp .found
 .start:
     add rsi, 2
     lea rdi, [c_name]
 .cl:
     lodsb
     cmp al, 10
-    je .done
-    cmp al, 0
     je .done
     stosb
     jmp .cl
